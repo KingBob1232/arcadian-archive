@@ -37,7 +37,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [listening, setListening] = useState(false);
 
@@ -63,6 +63,21 @@ export default function ChatPage() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const chatListRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Detect mobile device
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 900);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Get current user on mount
   useEffect(() => {
@@ -95,16 +110,17 @@ export default function ChatPage() {
     return () => clearTimeout(t);
   }, [messages]);
 
+  // Close sidebar when selecting a chat on mobile
   useEffect(() => {
-    const cleanup = window.setInterval(() => {
-      setTrail((prev) => prev.slice(0, 10));
-    }, 120);
+    if (isMobile && chatId) {
+      setSidebarOpen(false);
+    }
+  }, [chatId, isMobile]);
 
-    return () => clearInterval(cleanup);
-  }, []);
-
-  useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
+  const onMouseMove = useMemo(() => {
+    if (isMobile) return undefined;
+    
+    return (e: MouseEvent) => {
       if (trailFrameRef.current) return;
 
       trailFrameRef.current = window.requestAnimationFrame(() => {
@@ -118,6 +134,10 @@ export default function ChatPage() {
         trailFrameRef.current = null;
       });
     };
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!onMouseMove) return;
 
     window.addEventListener("mousemove", onMouseMove);
     return () => {
@@ -126,7 +146,7 @@ export default function ChatPage() {
         window.cancelAnimationFrame(trailFrameRef.current);
       }
     };
-  }, []);
+  }, [onMouseMove]);
 
   async function loadChats() {
     if (!user) return;
@@ -251,7 +271,6 @@ export default function ChatPage() {
       } else {
         setChatId(null);
         setMessages([]);
-        // Optionally create a new chat if none remain
         await createNewChat();
       }
     }
@@ -266,7 +285,6 @@ export default function ChatPage() {
     if (error) {
       console.error("Failed to delete chat:", error);
       alert("Failed to delete chat. Please try again.");
-      // Reload chats to restore the deleted one
       await loadChats();
     }
   }
@@ -314,7 +332,7 @@ export default function ChatPage() {
   }
 
   function speak(text: string) {
-    if (!voiceEnabled || !text.trim()) return;
+    if (!voiceEnabled || !text.trim() || isMobile) return; // Disable speech on mobile for better performance
 
     speechSynthesis.cancel();
 
@@ -330,6 +348,12 @@ export default function ChatPage() {
   }
 
   function startVoiceInput() {
+    if (isMobile) {
+      // On mobile, just focus the input
+      inputRef.current?.focus();
+      return;
+    }
+
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -590,7 +614,7 @@ export default function ChatPage() {
 
             if (json.type === "done") {
               setSending(false);
-              if (fullText) speak(fullText);
+              if (fullText && !isMobile) speak(fullText);
             }
           } catch (err) {
             console.error("Failed parsing stream event:", err);
@@ -626,7 +650,7 @@ export default function ChatPage() {
     return (
       <main className="jade-app">
         <div className="jade-grid-overlay" />
-        <div className="jade-shell sidebar-open">
+        <div className="jade-shell">
           <div className="jade-main" style={{ justifyContent: 'center', alignItems: 'center' }}>
             <div className="jade-thinking">Loading...</div>
           </div>
@@ -640,9 +664,9 @@ export default function ChatPage() {
       return (
         <main className="jade-app">
           <div className="jade-grid-overlay" />
-          <div className="jade-shell sidebar-open">
+          <div className="jade-shell">
             <div className="jade-main" style={{ justifyContent: 'center', alignItems: 'center' }}>
-              <div className="jade-brand-card" style={{ maxWidth: '400px', textAlign: 'center' }}>
+              <div className="jade-brand-card" style={{ maxWidth: '400px', width: '100%', textAlign: 'center' }}>
                 <div className="jade-brand-kicker">JADE CORE</div>
                 <h1>The Arcadian Archive</h1>
                 <p>Reset your password</p>
@@ -693,9 +717,9 @@ export default function ChatPage() {
     return (
       <main className="jade-app">
         <div className="jade-grid-overlay" />
-        <div className="jade-shell sidebar-open">
+        <div className="jade-shell">
           <div className="jade-main" style={{ justifyContent: 'center', alignItems: 'center' }}>
-            <div className="jade-brand-card" style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <div className="jade-brand-card" style={{ maxWidth: '400px', width: '100%', textAlign: 'center' }}>
               <div className="jade-brand-kicker">JADE CORE</div>
               <h1>The Arcadian Archive</h1>
               <p>Built for Jade 💚</p>
@@ -758,13 +782,13 @@ export default function ChatPage() {
                       }}
                       style={{ flex: 1 }}
                     >
-                      Switch to {authMode === 'signin' ? 'Sign Up' : 'Sign In'}
+                      Switch
                     </button>
                   </div>
 
                   {authMode === 'signup' && (
                     <p style={{ fontSize: '0.8rem', color: 'var(--jade-muted)', marginTop: '10px' }}>
-                      By signing up, you'll receive a confirmation email to verify your account.
+                      Check your email for confirmation
                     </p>
                   )}
                 </div>
@@ -780,132 +804,139 @@ export default function ChatPage() {
     <main className="jade-app">
       <div className="jade-grid-overlay" />
 
-      <div className="jade-mouse-trail" aria-hidden="true">
-        {trail.map((point, index) => (
-          <span
-            key={point.id}
-            className="jade-trail-dot"
+      {!isMobile && (
+        <div className="jade-mouse-trail" aria-hidden="true">
+          {trail.map((point, index) => (
+            <span
+              key={point.id}
+              className="jade-trail-dot"
+              style={{
+                left: point.x,
+                top: point.y,
+                opacity: Math.max(0.08, 0.55 - index * 0.04),
+                transform: `translate(-50%, -50%) scale(${Math.max(
+                  0.35,
+                  1 - index * 0.05
+                )})`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="jade-shell">
+        {/* Mobile overlay */}
+        {sidebarOpen && isMobile && (
+          <div
+            className="jade-mobile-overlay"
+            onClick={() => setSidebarOpen(false)}
             style={{
-              left: point.x,
-              top: point.y,
-              opacity: Math.max(0.08, 0.55 - index * 0.04),
-              transform: `translate(-50%, -50%) scale(${Math.max(
-                0.35,
-                1 - index * 0.05
-              )})`,
+              display: 'block',
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(5px)',
+              zIndex: 999
             }}
           />
-        ))}
-      </div>
-
-      <div className={`jade-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
-        {sidebarOpen && (
-          <>
-            <div
-              className="jade-mobile-overlay"
-              onClick={() => setSidebarOpen(false)}
-            />
-            <aside className="jade-sidebar">
-              <div className="jade-brand-card">
-                <div className="jade-brand-kicker">JADE CORE</div>
-                <h1>The Arcadian Archive</h1>
-                <p>Welcome, {user.email}</p>
-              </div>
-
-              <button
-                className="jade-primary-btn"
-                onClick={() => void createNewChat()}
-                type="button"
-              >
-                + New Chat
-              </button>
-
-              <div className="jade-chat-list-container" ref={chatListRef}>
-                <div className="jade-chat-list">
-                  {chats.map((chat) => (
-                    <div
-                      key={chat.id}
-                      className={`jade-chat-item ${chat.id === chatId ? "active" : ""}`}
-                    >
-                      {editingChatId === chat.id ? (
-                        <div className="jade-chat-rename">
-                          <input
-                            value={titleDraft}
-                            onChange={(e) => setTitleDraft(e.target.value)}
-                            className="jade-rename-input"
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") void saveRename(chat.id);
-                              if (e.key === "Escape") setEditingChatId(null);
-                            }}
-                            autoFocus
-                          />
-                          <button
-                            className="jade-mini-btn"
-                            onClick={() => void saveRename(chat.id)}
-                            type="button"
-                          >
-                            Save
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            className="jade-chat-main"
-                            onClick={() => void selectChat(chat.id)}
-                            type="button"
-                          >
-                            {chat.title}
-                          </button>
-                          <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                            <button
-                              className="jade-mini-btn"
-                              onClick={() => startRename(chat)}
-                              type="button"
-                              style={{ flex: 1 }}
-                            >
-                              Rename
-                            </button>
-                            <button
-                              className="jade-mini-btn"
-                              onClick={() => void deleteChat(chat.id)}
-                              type="button"
-                              style={{ 
-                                flex: 1,
-                                background: 'rgba(255, 100, 100, 0.1)',
-                                borderColor: 'rgba(255, 100, 100, 0.3)',
-                                color: '#ff9b9b'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(255, 100, 100, 0.2)';
-                                e.currentTarget.style.borderColor = 'rgba(255, 100, 100, 0.5)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'rgba(255, 100, 100, 0.1)';
-                                e.currentTarget.style.borderColor = 'rgba(255, 100, 100, 0.3)';
-                              }}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                className="jade-mini-btn"
-                onClick={handleSignOut}
-                style={{ marginTop: 'auto' }}
-                type="button"
-              >
-                Sign Out
-              </button>
-            </aside>
-          </>
         )}
 
+        {/* Sidebar */}
+        <aside className={`jade-sidebar ${!sidebarOpen && isMobile ? 'closed' : ''}`} style={{
+          transform: sidebarOpen ? 'translateX(0)' : isMobile ? 'translateX(-100%)' : 'translateX(0)',
+          display: isMobile ? 'block' : 'flex'
+        }}>
+          <div className="jade-brand-card">
+            <div className="jade-brand-kicker">JADE CORE</div>
+            <h1>The Arcadian Archive</h1>
+            <p>Welcome, {user.email?.split('@')[0]}</p>
+          </div>
+
+          <button
+            className="jade-primary-btn"
+            onClick={() => void createNewChat()}
+            type="button"
+          >
+            + New Chat
+          </button>
+
+          <div className="jade-chat-list-container" ref={chatListRef}>
+            <div className="jade-chat-list">
+              {chats.map((chat) => (
+                <div
+                  key={chat.id}
+                  className={`jade-chat-item ${chat.id === chatId ? "active" : ""}`}
+                >
+                  {editingChatId === chat.id ? (
+                    <div className="jade-chat-rename">
+                      <input
+                        value={titleDraft}
+                        onChange={(e) => setTitleDraft(e.target.value)}
+                        className="jade-rename-input"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void saveRename(chat.id);
+                          if (e.key === "Escape") setEditingChatId(null);
+                        }}
+                        autoFocus
+                      />
+                      <button
+                        className="jade-mini-btn"
+                        onClick={() => void saveRename(chat.id)}
+                        type="button"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        className="jade-chat-main"
+                        onClick={() => void selectChat(chat.id)}
+                        type="button"
+                      >
+                        {chat.title}
+                      </button>
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                        <button
+                          className="jade-mini-btn"
+                          onClick={() => startRename(chat)}
+                          type="button"
+                          style={{ flex: 1 }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          className="jade-mini-btn"
+                          onClick={() => void deleteChat(chat.id)}
+                          type="button"
+                          style={{ 
+                            flex: 1,
+                            background: 'rgba(255, 100, 100, 0.1)',
+                            borderColor: 'rgba(255, 100, 100, 0.3)',
+                            color: '#ff9b9b'
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            className="jade-mini-btn"
+            onClick={handleSignOut}
+            style={{ marginTop: 'auto' }}
+            type="button"
+          >
+            Sign Out
+          </button>
+        </aside>
+
+        {/* Main content */}
         <section className="jade-main">
           <header className="jade-topbar">
             <div className="jade-topbar-left">
@@ -961,7 +992,7 @@ export default function ChatPage() {
                 onClick={startVoiceInput}
                 type="button"
               >
-                {listening ? "🎙 Listening" : "🎤 Voice"}
+                {isMobile ? "📱 Type" : (listening ? "🎙 Listening" : "🎤 Voice")}
               </button>
 
               <button
@@ -969,12 +1000,12 @@ export default function ChatPage() {
                 onClick={() => fileInputRef.current?.click()}
                 type="button"
               >
-                📎 Upload
+                📎 File
               </button>
 
-              {uploadedFileName ? (
-                <div className="jade-file-pill">Attached: {uploadedFileName}</div>
-              ) : null}
+              {uploadedFileName && (
+                <div className="jade-file-pill">{uploadedFileName}</div>
+              )}
 
               <input
                 ref={fileInputRef}
@@ -986,12 +1017,16 @@ export default function ChatPage() {
 
             <div className="jade-composer">
               <input
+                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 className="jade-input"
-                placeholder="Talk to your AI..."
+                placeholder={isMobile ? "Message..." : "Talk to your AI..."}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") void sendMessage();
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void sendMessage();
+                  }
                 }}
               />
 
@@ -1001,7 +1036,7 @@ export default function ChatPage() {
                 type="button"
                 disabled={sending}
               >
-                {sending ? "Sending..." : "Send"}
+                {sending ? "..." : "Send"}
               </button>
             </div>
           </footer>
